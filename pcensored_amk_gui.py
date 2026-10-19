@@ -13,7 +13,6 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, scrolledtext, ttk
 
-import numpy as np
 from PIL import Image
 
 import pcensored_amk as core
@@ -178,6 +177,11 @@ class App(tk.Tk):
             self.log_q.put(("log", f"모델 로드 실패: {e}"))
             self.log_q.put(("done", None))
             return
+        if core.IMGUTILS_AVAILABLE:
+            self.log_q.put(("log", "탐지 모드: auto (imgutils 주력 + ntd11 보완)"))
+        else:
+            self.log_q.put(("log", "탐지 모드: ntd11 단독 "
+                                   "(imgutils 없음 — pip install dghs-imgutils)"))
         total = len(files)
         t0 = time.time()
         for i, f in enumerate(files, 1):
@@ -192,10 +196,10 @@ class App(tk.Tk):
                 self.log_q.put(("progress", i))
                 continue
             flat = core.flatten_alpha(img, opts["bg"])
-            rgb = np.array(flat)
-            dets = det.detect(rgb, opts["confidence"], smart_crop=opts["smart_crop"])
+            dets = core.detect_auto(flat, det, opts["confidence"],
+                                    smart_crop=opts["smart_crop"])
             out_img = core.censor_image(flat, dets, opts["block"], opts["padding"])
-            out_path = out_dir / (f.stem + "_censored.webp")
+            out_path = core.output_path(out_dir, f)
             out_img.save(out_path, "WEBP", quality=opts["quality"])
             dt = time.time() - t1
             tag = f"{len(dets)}개 영역" if dets else "탐지 없음"

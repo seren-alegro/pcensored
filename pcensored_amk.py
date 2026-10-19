@@ -4,11 +4,15 @@ pcensored-amk: alpha-mask-killer + PCensored 합친 파이썬 도구.
 
 파이프라인 (이미지 1장당):
   1. 알파 합성: 투명 채널이 있으면 지정 배경색 위에 합성 (alpha-mask-killer)
-  2. NTD11 탐지: 전체 스캔 + 스마트 크롭 4회 (PCensored)
+  2. NSFW 탐지 (auto 모드):
+     - imgutils detect_censors가 주력 (pussy/penis)
+     - ntd11이 보완 (anus/testicles) — 전체 스캔 + 스마트 크롭 4회
+     - imgutils가 없으면 ntd11 단독으로 폴백
   3. 모자이크: 탐지 영역에 모자이크
   4. WEBP 저장
 
 필요: pip install ultralytics numpy Pillow
+      (auto 모드 주력 탐지용: pip install dghs-imgutils)
 모델: ntd11.pt (Civitai에서 내려받은 .pt를 그대로 사용, 변환 불필요)
 
 사용법:
@@ -29,6 +33,18 @@ try:
     from ultralytics import YOLO
 except ImportError:
     sys.exit("ultralytics가 없어요: pip install ultralytics")
+
+try:
+    from imgutils.detect.censor import detect_censors
+    IMGUTILS_AVAILABLE = True
+except ImportError:
+    IMGUTILS_AVAILABLE = False
+    detect_censors = None
+
+# auto 모드 라벨 분담 (다른 검증된 툴과 동일한 방식)
+# - imgutils 주력: pussy/penis (nipple_f는 pixiv 기준상 제외)
+# - ntd11 보완: anus/testicles
+IMGUTILS_LABELS = {"pussy", "penis"}
 
 # ---------------------------------------------------------------------------
 # 상수
@@ -185,6 +201,51 @@ class Ntd11Detector:
         return self._merge_duplicates(dets)
 
 
+def _allowed_ntd11_supplement(label: str) -> bool:
+    """auto 모드에서 ntd11이 맡는 라벨: anus / testicles만."""
+    label = label.lower()
+    if "anus" in label:
+        return True
+    if "testicle" in label:
+        return True
+    return False
+
+
+def detect_auto(pil_img: Image.Image, detector: "Ntd11Detector",
+                confidence: float, smart_crop: bool = True,
+                force_ntd11: bool = False):
+    """auto 모드 탐지: imgutils 주력(pussy/penis) + ntd11 보완(anus/testicles).
+
+    imgutils가 없거나 force_ntd11이면 ntd11 단독으로 폴백.
+    pil_img는 알파 합성이 끝난 RGB PIL 이미지.
+    """
+    dets = []
+    use_imgutils = IMGUTILS_AVAILABLE and not force_ntd11
+    if use_imgutils:
+        try:
+            for (x0, y0, x1, y1), label, score in \
+                    detect_censors(pil_img, conf_threshold=confidence):
+                if label in IMGUTILS_LABELS and score >= confidence:
+                    dets.append({
+                        "label": label,
+                        "score": float(score),
+                        "x1": int(x0), "y1": int(y0),
+                        "x2": int(x1), "y2": int(y1),
+                    })
+        except Exception as e:
+            print(f"imgutils 탐지 실패, ntd11 단독으로 계속: {e}")
+            use_imgutils = False
+    rgb = np.array(pil_img)
+    if use_imgutils:
+        # ntd11은 anus/testicles만 보완
+        raw = detector.detect(rgb, confidence, smart_crop=smart_crop)
+        dets += [d for d in raw if _allowed_ntd11_supplement(d["label"])]
+    else:
+        # ntd11 단독 (pussy/penis/anus/testicles 전부)
+        dets += detector.detect(rgb, confidence, smart_crop=smart_crop)
+    return Ntd11Detector._merge_duplicates(dets)
+
+
 # ---------------------------------------------------------------------------
 # 3. 모자이크 (Rust mosaic.rs 포트)
 # ---------------------------------------------------------------------------
@@ -239,6 +300,22 @@ def collect_images(path: Path):
                   if p.is_file() and p.suffix.lower() in IMG_EXTS)
 
 
+def output_path(out_dir: Path, src: Path) -> Path:
+    """출력 경로: 원본 파일명 그대로 .webp로.
+
+    출력 폴더가 입력과 같아서 같은 파일이 되면 _censored를 붙여
+    원본 덮어쓰기를 피해요.
+    """
+    cand = out_dir / (src.stem + ".webp")
+    try:
+        same = cand.resolve() == src.resolve()
+    except OSError:
+        same = False
+    if same:
+        cand = out_dir / (src.stem + "_censored.webp")
+    return cand
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="alpha-mask-killer + PCensored 합친 파이썬 도구")
@@ -257,6 +334,9 @@ def main():
                     help="스마트 크롭 끄기 (빠름)")
     ap.add_argument("--threads", type=int, default=4,
                     help="CPU 스레드 수")
+    ap.add_argument("--detector", choices=["auto", "ntd11"], default="auto",
+                    help="auto: imgutils 주력+ntd11 보완 (기본), "
+                         "ntd11: ntd11 단독")
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -279,6 +359,15 @@ def main():
 
     print(f"모델 로딩 중… ({model})")
     det = Ntd11Detector(model, threads=args.threads)
+    if args.detector == "auto":
+        if IMGUTILS_AVAILABLE:
+            print("탐지 모드: auto (imgutils 주력 + ntd11 보완)")
+        else:
+            print("탐지 모드: auto 요청됐지만 imgutils가 없어 ntd11 단독으로 동작 "
+                  "(pip install dghs-imgutils)")
+    else:
+        print("탐지 모드: ntd11 단독")
+    force_ntd11 = (args.detector == "ntd11")
 
     total = len(files)
     t0 = time.time()
@@ -291,14 +380,14 @@ def main():
             continue
         # 1. 알파 합성
         flat = flatten_alpha(img, bg)
-        rgb = np.array(flat)
-        # 2. 탐지
-        dets = det.detect(rgb, args.confidence,
-                          smart_crop=not args.no_smart_crop)
+        # 2. 탐지 (auto: imgutils 주력 + ntd11 보완)
+        dets = detect_auto(flat, det, args.confidence,
+                           smart_crop=not args.no_smart_crop,
+                           force_ntd11=force_ntd11)
         # 3. 모자이크
         out_img = censor_image(flat, dets, args.block, args.padding)
-        # 4. 저장
-        out_path = out_dir / (f.stem + "_censored.webp")
+        # 4. 저장 (파일명 그대로, _censored 안 붙임)
+        out_path = output_path(out_dir, f)
         out_img.save(out_path, "WEBP", quality=args.quality)
         dt = time.time() - t1
         tag = f"{len(dets)}개 영역" if dets else "탐지 없음"

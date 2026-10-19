@@ -7,6 +7,7 @@ dependencies = [
     "ultralytics",
     "numpy",
     "Pillow",
+    "dghs-imgutils",  # auto 모드 주력 탐지 (없으면 ntd11 단독으로 폴백)
 ]
 
 [tool.uv]

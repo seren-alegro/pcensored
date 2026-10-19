@@ -8,7 +8,9 @@ alpha-mask-killer의 알파 합성 로직과 검열 파이프라인을 합친 �
 
 이미지 1장당 파이프라인:
 1. **알파 합성** — 투명 채널이 있으면 지정 배경색 위에 합성
-2. **NSFW 탐지** — 전체 스캔 + 스마트 크롭 4회 (CENTER/LOWER/LEFT/RIGHT)
+2. **NSFW 탐지 (auto 모드)** — imgutils `detect_censors`가 주력으로 성기를 탐지하고,
+   ntd11이 항문·고환만 보완 (전체 스캔 + 스마트 크롭 4회 CENTER/LOWER/LEFT/RIGHT).
+   imgutils가 설치되어 있지 않으면 ntd11 단독으로 동작해요.
 3. **모자이크** — 탐지 영역에 모자이크 (대상: 여성기·남성기·항문)
 4. **WEBP 저장**
 
@@ -59,15 +61,17 @@ uv run pcensored_amk.py 입력폴더 -o 출력폴더 \
 
 | 옵션 | 기본값 | 설명 |
 |---|---|---|
-| `--confidence` | 0.10 | 탐지 신뢰도 임계값 |
+| `--confidence` | 0.10 | 탐지 신뢰도 임계값 (imgutils·ntd11 공통) |
 | `--block` | 20 | 모자이크 강도 (클수록 강함) |
 | `--padding` | 15 | 탐지 박스 확장(px) |
 | `--quality` | 95 | WEBP 품질 |
 | `--bg` | ffffff | 알파 합성 배경색 (hex) |
 | `--no-smart-crop` | 끔 | 스마트 크롭 끄기 (약 5배 빠름) |
-| `--threads` | 4 | ONNX 스레드 수 |
+| `--threads` | 4 | CPU 스레드 수 |
+| `--detector` | auto | `auto`: imgutils 주력+ntd11 보완 / `ntd11`: ntd11 단독 |
 
-출력: `{원본이름}_censored.webp`
+출력: `{원본이름}.webp` (파일명 그대로 — `_censored`를 붙이지 않아요.
+단, 출력 폴더가 입력과 같아서 같은 파일이 되면 `_censored`를 붙여 원본 덮어쓰기를 피해요)
 
 ## 속도 참고
 
