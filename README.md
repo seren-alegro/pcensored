@@ -30,13 +30,11 @@ uv run pcensored_amk.py 입력폴더 -o 출력폴더
 
 ## 탐지 모델 내려받기 (필수)
 
-모델 파일(`ntd11.pt`)은 이 저장소에 들어있지 않아요. 아래에서 v5.0 zip을 받아
+모델 파일(`ntd11.pt`)은 이 저장소에 들어있지 않아요. 아래 모델 페이지에서 v5.0을 받아
 압축을 풀고, 안에 있는 `.pt` 파일을 `ntd11.pt`로 이름을 바꿔
 **이 폴더(실행 파일이 있는 폴더)에 넣어주세요.** 변환 과정은 필요 없어요.
 
 - **모델 페이지**: https://civitai.com/models/1313556/anime-nsfw-detection-adetailer-all-in-one
-- **직접 다운로드**: https://civitai.com/api/download/models/2266294?fileId=2158406
-  (`animeNSFWDetection_v50.zip`, 약 18MB)
 
 **모델 크레딧**: [newtextdoc1111](https://civitai.com/user/newtextdoc1111)의
 Anime NSFW Detection / ADetailer All-in-One (v5.0, Apache License) 모델을 사용합니다.
