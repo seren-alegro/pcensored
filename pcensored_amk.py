@@ -76,6 +76,7 @@ def flatten_alpha(img: Image.Image, bg: tuple) -> Image.Image:
 # ---------------------------------------------------------------------------
 
 def _allowed(label: str) -> bool:
+    # pixiv 기준: 유두(nipples)는 검열하지 않음
     label = label.lower()
     if "pussy" in label or "vagina" in label:
         return True
