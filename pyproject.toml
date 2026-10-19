@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "alpha-mask-killer + PCensored 합친 파이썬 도구"
 requires-python = ">=3.9"
 dependencies = [
-    "onnxruntime",
+    "ultralytics",
     "numpy",
     "Pillow",
 ]

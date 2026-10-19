@@ -8,8 +8,8 @@ pcensored-amk: alpha-mask-killer + PCensored 합친 파이썬 도구.
   3. 모자이크: 탐지 영역에 모자이크
   4. WEBP 저장
 
-필요: pip install onnxruntime numpy Pillow
-모델: ntd11.onnx (Rust 포팅 때 만든 40MB ONNX, .pt 원본은 건드리지 않음)
+필요: pip install ultralytics numpy Pillow
+모델: ntd11.pt (Civitai에서 내려받은 .pt를 그대로 사용, 변환 불필요)
 
 사용법:
   python3 pcensored_amk.py 입력폴더 -o 출력폴더
@@ -26,19 +26,14 @@ import numpy as np
 from PIL import Image
 
 try:
-    import onnxruntime as ort
+    from ultralytics import YOLO
 except ImportError:
-    sys.exit("onnxruntime이 없어요: pip install onnxruntime")
+    sys.exit("ultralytics가 없어요: pip install ultralytics")
 
 # ---------------------------------------------------------------------------
-# 상수 (Rust 포팅과 동일)
+# 상수
 # ---------------------------------------------------------------------------
 
-CLASS_NAMES = [
-    "nipples", "pussy", "anus", "penis",
-    "cross-section", "x-ray", "testicles",
-]
-NUM_CLASSES = 7
 INPUT_SIZE = 1280
 
 SMART_CROPS = [
@@ -100,69 +95,32 @@ def _iou(a, b) -> float:
     return inter / (aa + ab - inter + 1e-6)
 
 
-def _nms(boxes, iou_thresh=NMS_IOU):
-    """클래스별 NMS. boxes: [(x1,y1,x2,y2,score,cls), ...]"""
-    boxes = sorted(boxes, key=lambda b: b[4], reverse=True)
-    kept = []
-    for b in boxes:
-        if any(k[5] == b[5] and _iou(b, k) > iou_thresh for k in kept):
-            continue
-        kept.append(b)
-    return kept
 
 
 class Ntd11Detector:
-    def __init__(self, onnx_path: str, threads: int = 4):
-        so = ort.SessionOptions()
-        so.intra_op_num_threads = threads
-        self.sess = ort.InferenceSession(onnx_path, sess_options=so)
-        self.in_name = self.sess.get_inputs()[0].name
-        # 출력 형태 검증: (1, 43, N)
-        shape = self.sess.get_outputs()[0].shape
-        assert shape[0] == 1 and shape[1] == 4 + NUM_CLASSES + 32, \
-            f"예상과 다른 ONNX 출력 형태: {shape}"
-
-    def _preprocess(self, rgb: np.ndarray):
-        """ultralytics식 letterbox. (input, scale, pad_x, pad_y) 반환."""
-        h, w = rgb.shape[:2]
-        s = INPUT_SIZE
-        scale = min(s / w, s / h)
-        nw, nh = round(w * scale), round(h * scale)
-        resized = np.array(Image.fromarray(rgb).resize((nw, nh), Image.BILINEAR))
-        dw, dh = s - nw, s - nh
-        pad_x = round(dw / 2.0 - 0.1)
-        pad_y = round(dh / 2.0 - 0.1)
-        canvas = np.full((s, s, 3), 114, dtype=np.uint8)
-        canvas[pad_y:pad_y + nh, pad_x:pad_x + nw] = resized
-        inp = canvas.astype(np.float32) / 255.0
-        inp = inp.transpose(2, 0, 1)[None]  # NCHW
-        return inp, scale, pad_x, pad_y
+    def __init__(self, pt_path: str, threads: int = 4):
+        try:
+            import torch
+            torch.set_num_threads(max(1, threads))
+        except Exception:
+            pass
+        self.model = YOLO(pt_path)
+        self.names = self.model.names  # {idx: label}
 
     def detect_raw(self, rgb: np.ndarray, confidence: float):
         """단일 이미지 추론. 좌표는 입력 이미지 기준 픽셀."""
         h, w = rgb.shape[:2]
-        inp, scale, pad_x, pad_y = self._preprocess(rgb)
-        out = self.sess.run(None, {self.in_name: inp})[0]  # (1, 43, N)
-        data = out[0]  # (43, N)
-        n = data.shape[1]
-
-        boxes = []
-        scores = data[4:4 + NUM_CLASSES]  # sigmoid 적용済み
-        best_cls = np.argmax(scores, axis=0)
-        best_score = scores[best_cls, np.arange(n)]
-        for i in np.where(best_score >= confidence)[0]:
-            cx, cy, bw, bh = data[0, i], data[1, i], data[2, i], data[3, i]
-            x1 = (cx - bw / 2 - pad_x) / scale
-            y1 = (cy - bh / 2 - pad_y) / scale
-            x2 = (cx + bw / 2 - pad_x) / scale
-            y2 = (cy + bh / 2 - pad_y) / scale
-            boxes.append((x1, y1, x2, y2, float(best_score[i]), int(best_cls[i])))
-
+        results = self.model.predict(rgb, conf=confidence, iou=NMS_IOU,
+                                     imgsz=INPUT_SIZE, verbose=False)
         dets = []
-        for x1, y1, x2, y2, score, cls in _nms(boxes):
+        boxes = results[0].boxes
+        if boxes is None:
+            return dets
+        for xyxy, conf, cls in zip(boxes.xyxy, boxes.conf, boxes.cls):
+            x1, y1, x2, y2 = (float(v) for v in xyxy.tolist())
             dets.append({
-                "label": CLASS_NAMES[cls],
-                "score": score,
+                "label": str(self.names[int(cls)]),
+                "score": float(conf),
                 "x1": int(max(0.0, min(w, x1))),
                 "y1": int(max(0.0, min(h, y1))),
                 "x2": int(max(0.0, min(w, x2))),
@@ -287,7 +245,7 @@ def main():
     ap.add_argument("-o", "--output", default="output",
                     help="출력 폴더 (기본: output)")
     ap.add_argument("--model", default=None,
-                    help="ntd11.onnx 경로 (기본: 스크립트 옆)")
+                    help=".pt 모델 경로 (기본: 스크립트 옆 ntd11.pt)")
     ap.add_argument("--confidence", type=float, default=0.25)
     ap.add_argument("--block", type=int, default=20, help="모자이크 강도")
     ap.add_argument("--padding", type=int, default=15)
@@ -296,13 +254,16 @@ def main():
                     help="알파 합성 배경색 hex (기본: ffffff)")
     ap.add_argument("--no-smart-crop", action="store_true",
                     help="스마트 크롭 끄기 (빠름)")
-    ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--threads", type=int, default=4,
+                    help="CPU 스레드 수")
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
-    model = args.model or str(script_dir / "ntd11.onnx")
+    model = args.model or str(script_dir / "ntd11.pt")
     if not os.path.isfile(model):
-        sys.exit(f"모델이 없어요: {model}\n--model 로 ntd11.onnx 경로를 지정하세요.")
+        sys.exit(f"모델이 없어요: {model}\n"
+                 f"Civitai에서 .pt 모델을 내려받아 ntd11.pt로 두거나\n"
+                 f"--model 로 경로를 지정하세요.")
 
     bg = parse_bg(args.bg)
     in_path = Path(args.input)

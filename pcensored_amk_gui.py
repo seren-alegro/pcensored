@@ -164,7 +164,7 @@ class App(tk.Tk):
         self._log("중지 요청됨…")
 
     def _work(self, files, opts):
-        model = str(Path(__file__).resolve().parent / "ntd11.onnx")
+        model = str(Path(__file__).resolve().parent / "ntd11.pt")
         if not os.path.isfile(model):
             self.log_q.put(("log", f"모델이 없어요: {model}"))
             self.log_q.put(("done", None))
