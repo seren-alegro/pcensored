@@ -33,22 +33,22 @@ uv run pcensored_amk.py 입력폴더 -o 출력폴더
 모델 파일(`ntd11.onnx`)은 이 저장소에 들어있지 않아요. 아래 링크에서 직접 받아서
 **이 폴더(실행 파일이 있는 폴더)에 넣어주세요.**
 
-- **직접 다운로드**: https://civitai.com/api/download/models/1863248?fileId=1763037
-  (`animeNSFWDetection_v40.zip`, 약 168MB)
+- **직접 다운로드**: https://civitai.com/api/download/models/2266294?fileId=2158406
+  (`animeNSFWDetection_v50.zip`, 약 18MB)
 
-받은 zip의 압축을 풀고, 안에 있는 `ntd11_anime_nsfw_segm_v4_all.pt`를 ONNX로 변환하세요:
+받은 zip의 압축을 풀고, 안에 있는 `.pt` 파일을 ONNX로 변환하세요:
 
 ```bash
 # 변환에도 ultralytics가 필요해요
 uv pip install ultralytics
 
-uv run export_onnx.py ntd11_anime_nsfw_segm_v4_all.pt ntd11.onnx
+uv run export_onnx.py 모델파일.pt ntd11.onnx
 ```
 
 변환된 `ntd11.onnx`를 실행 폴더에 두면 준비 완료예요.
 
 **모델 크레딧**: [newtextdoc1111](https://civitai.com/user/newtextdoc1111)의
-Anime NSFW Detection / ADetailer All-in-One (v4.0, Apache License) 모델을 사용합니다.
+Anime NSFW Detection / ADetailer All-in-One (v5.0, Apache License) 모델을 사용합니다.
 
 ## 사용법
 
