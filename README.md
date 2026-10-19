@@ -11,7 +11,7 @@ alpha-mask-killer의 알파 합성 로직과 검열 파이프라인을 합친 �
 2. **NSFW 탐지 (auto 모드)** — imgutils `detect_censors`가 주력으로 성기를 탐지하고,
    ntd11이 항문·고환만 보완 (전체 스캔 + 스마트 크롭 4회 CENTER/LOWER/LEFT/RIGHT).
    imgutils가 설치되어 있지 않으면 ntd11 단독으로 동작해요.
-3. **모자이크** — 탐지 영역에 모자이크 (대상: 여성기·남성기·항문)
+3. **모자이크** — 탐지 영역에 모자이크 (대상: 여성기·남성기·항문 유두부분은 제외됨.)
 4. **WEBP 저장**
 
 Windows / Linux / macOS에서 모두 동작해요.
