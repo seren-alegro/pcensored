@@ -61,7 +61,7 @@ class App(tk.Tk):
         ttk.Label(frm, text="옵션", font=("", 11, "bold")).pack(anchor="w", pady=(8, 0))
         opt = ttk.Frame(frm)
         opt.pack(fill="x")
-        self.conf_var = self._slider(opt, "Confidence", 0.05, 0.90, 0.25, 0)
+        self.conf_var = self._slider(opt, "Confidence", 0.05, 0.90, 0.15, 0)
         self.block_var = self._slider(opt, "모자이크 강도", 4, 64, 20, 1)
         self.pad_var = self._slider(opt, "Padding", 0, 64, 15, 2)
         self.q_var = self._slider(opt, "WEBP 품질", 10, 100, 95, 3)
