@@ -1,5 +1,7 @@
 # pcensored
 
+**p**ixiv **censor** program — pixiv 업로드용 검열 도구예요.
+
 이미지의 민감한 부위를 자동 탐지해 모자이크 처리하는 도구.
 alpha-mask-killer의 알파 합성 로직과 검열 파이프라인을 합친 버전이에요.
 
