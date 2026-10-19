@@ -59,7 +59,7 @@ uv run pcensored_amk.py 입력폴더 -o 출력폴더 \
 
 | 옵션 | 기본값 | 설명 |
 |---|---|---|
-| `--confidence` | 0.15 | 탐지 신뢰도 임계값 |
+| `--confidence` | 0.10 | 탐지 신뢰도 임계값 |
 | `--block` | 20 | 모자이크 강도 (클수록 강함) |
 | `--padding` | 15 | 탐지 박스 확장(px) |
 | `--quality` | 95 | WEBP 품질 |

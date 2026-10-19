@@ -247,7 +247,7 @@ def main():
                     help="출력 폴더 (기본: output)")
     ap.add_argument("--model", default=None,
                     help=".pt 모델 경로 (기본: 스크립트 옆 ntd11.pt)")
-    ap.add_argument("--confidence", type=float, default=0.15)
+    ap.add_argument("--confidence", type=float, default=0.10)
     ap.add_argument("--block", type=int, default=20, help="모자이크 강도")
     ap.add_argument("--padding", type=int, default=15)
     ap.add_argument("--quality", type=int, default=95, help="WEBP 품질")
