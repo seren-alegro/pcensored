@@ -7,9 +7,12 @@ pcensored-amk GUI (tkinter).
 
 import os
 import queue
+import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, scrolledtext, ttk
 
@@ -30,8 +33,65 @@ class App(tk.Tk):
         self.log_q = queue.Queue()
         self.worker = None
 
+        # 위젯을 만들기 전에 한글 폰트부터 적용 (아래 _setup_korean_font 참고)
+        self.font_family = self._setup_korean_font()
         self._build_ui()
         self.after(100, self._poll_log)
+
+    def _setup_korean_font(self):
+        """한글 글리프가 있는 폰트를 찾아 Tk 기본 폰트들에 적용한다.
+
+        Tk는 fontconfig 폴백이 없어서 기본 폰트에 한글이 없으면 영문·숫자만
+        나오고 한글만 빈칸이 된다. fc-match가 주는 이름은 Tk가 인식하는
+        패밀리명과 어긋날 수 있으므로, tkinter.font.families()가 실제로
+        아는 이름 중에서 먼저 고르고 fc-match는 최후 수단으로만 쓴다.
+        적용 결과는 터미널에 출력해, 문제가 계속되면 원인 파악이 쉽다.
+        """
+        candidates = [
+            "Noto Sans CJK KR", "Noto Sans KR", "Source Han Sans KR",
+            "NanumGothic", "Nanum Gothic", "Pretendard", "IBM Plex Sans KR",
+            "Spoqa Han Sans Neo", "UnDotum", "Baekmuk Gulim",
+            "Malgun Gothic", "Apple SD Gothic Neo",
+        ]
+        try:
+            available = list(tkfont.families())
+        except Exception:
+            available = []
+        family = next((c for c in candidates if c in available), None)
+        if family is None:
+            keys = ("cjk", "nanum", "gulim", "dotum", "batang", "malgun",
+                    "gothic kr", "sans kr", "hangul")
+            family = next((f for f in available
+                           if any(k in f.lower() for k in keys)), None)
+        if family is None and sys.platform.startswith("linux"):
+            try:
+                out = subprocess.run(
+                    ["fc-match", ":lang=ko", "-f", "%{family}"],
+                    capture_output=True, text=True, timeout=5).stdout.strip()
+                if out:
+                    family = out.split(",")[0].strip()
+            except Exception:
+                pass
+        if not family:
+            print("[폰트] 한글 폰트를 찾지 못했어요. 한글이 빈칸으로 보이면 "
+                  "noto-fonts-cjk 같은 한글 폰트 설치가 필요해요.")
+            return None
+        for name in ("TkDefaultFont", "TkTextFont", "TkFixedFont",
+                     "TkMenuFont", "TkHeadingFont", "TkCaptionFont",
+                     "TkSmallCaptionFont", "TkIconFont", "TkTooltipFont"):
+            try:
+                tkfont.nametofont(name).configure(family=family)
+            except Exception:
+                pass
+        try:
+            size = tkfont.nametofont("TkDefaultFont").actual()["size"]
+            spec = (family, size) if size and size > 0 else (family,)
+            ttk.Style(self).configure(".", font=spec)
+        except Exception:
+            pass
+        applied = tkfont.nametofont("TkDefaultFont").actual()["family"]
+        print(f"[폰트] 한글 폰트 적용: {family} (실제 적용: {applied})")
+        return family
 
     # -- UI ---------------------------------------------------------------
     def _build_ui(self):
@@ -40,7 +100,7 @@ class App(tk.Tk):
         frm.pack(fill="both", expand=True, **pad)
 
         # 입력
-        ttk.Label(frm, text="입력", font=("", 11, "bold")).pack(anchor="w")
+        ttk.Label(frm, text="입력", font=(self.font_family or "", 11, "bold")).pack(anchor="w")
         row = ttk.Frame(frm)
         row.pack(fill="x")
         ttk.Button(row, text="파일 선택", command=self.pick_files).pack(side="left")
@@ -49,7 +109,7 @@ class App(tk.Tk):
         self.in_label.pack(side="left", padx=10)
 
         # 출력
-        ttk.Label(frm, text="출력 폴더", font=("", 11, "bold")).pack(anchor="w", pady=(8, 0))
+        ttk.Label(frm, text="출력 폴더", font=(self.font_family or "", 11, "bold")).pack(anchor="w", pady=(8, 0))
         row2 = ttk.Frame(frm)
         row2.pack(fill="x")
         self.out_var = tk.StringVar(value=self.out_dir)
@@ -57,7 +117,7 @@ class App(tk.Tk):
         ttk.Button(row2, text="변경", command=self.pick_out).pack(side="left", padx=5)
 
         # 옵션
-        ttk.Label(frm, text="옵션", font=("", 11, "bold")).pack(anchor="w", pady=(8, 0))
+        ttk.Label(frm, text="옵션", font=(self.font_family or "", 11, "bold")).pack(anchor="w", pady=(8, 0))
         opt = ttk.Frame(frm)
         opt.pack(fill="x")
         self.conf_var = self._slider(opt, "Confidence", 0.05, 0.90, 0.10, 0)
@@ -91,8 +151,9 @@ class App(tk.Tk):
         self.prog.pack(fill="x")
 
         # 로그
-        ttk.Label(frm, text="로그", font=("", 11, "bold")).pack(anchor="w", pady=(8, 0))
-        self.log = scrolledtext.ScrolledText(frm, height=14, state="disabled")
+        ttk.Label(frm, text="로그", font=(self.font_family or "", 11, "bold")).pack(anchor="w", pady=(8, 0))
+        log_kw = {"font": (self.font_family, 10)} if self.font_family else {}
+        self.log = scrolledtext.ScrolledText(frm, height=14, state="disabled", **log_kw)
         self.log.pack(fill="both", expand=True)
 
     def _slider(self, parent, label, lo, hi, init, row):
