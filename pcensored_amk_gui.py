@@ -181,7 +181,7 @@ class App(tk.Tk):
             self.log_q.put(("log", "탐지 모드: auto (imgutils 주력 + ntd11 보완)"))
         else:
             self.log_q.put(("log", "탐지 모드: ntd11 단독 "
-                                   "(imgutils 없음 — pip install dghs-imgutils)"))
+                                   "(imgutils/onnxruntime 없음 — uv sync 확인)"))
         total = len(files)
         t0 = time.time()
         for i, f in enumerate(files, 1):

@@ -8,6 +8,7 @@ dependencies = [
     "numpy",
     "Pillow",
     "dghs-imgutils",  # auto 모드 주력 탐지 (없으면 ntd11 단독으로 폴백)
+    "onnxruntime",  # imgutils(detect_censors)가 내부적으로 필요 — dghs-imgutils가 의존성으로 선언하지 않아 직접 명시 (없으면 import 시 pip 자동 설치를 시도해 uv 환경에서 깨짐)
 ]
 
 [tool.uv]

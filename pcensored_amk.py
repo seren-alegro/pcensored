@@ -12,7 +12,7 @@ pcensored-amk: alpha-mask-killer + PCensored 합친 파이썬 도구.
   4. WEBP 저장
 
 필요: pip install ultralytics numpy Pillow
-      (auto 모드 주력 탐지용: pip install dghs-imgutils)
+      (auto 모드 주력 탐지용: pip install dghs-imgutils onnxruntime)
 모델: ntd11.pt (Civitai에서 내려받은 .pt를 그대로 사용, 변환 불필요)
 
 사용법:
@@ -35,9 +35,14 @@ except ImportError:
     sys.exit("ultralytics가 없어요: pip install ultralytics")
 
 try:
+    # imgutils는 onnxruntime을 정식 의존성으로 선언하지 않아, 없으면 import
+    # 도중에 pip 자동 설치를 시도하다 AssertionError 등으로 죽는다.
+    # onnxruntime 존재를 먼저 확인해 그 경로 자체를 막고, 실패하면 어떤
+    # 예외든 잡아 ntd11 단독 폴백으로 넘긴다.
+    import onnxruntime  # noqa: F401
     from imgutils.detect.censor import detect_censors
     IMGUTILS_AVAILABLE = True
-except ImportError:
+except Exception:
     IMGUTILS_AVAILABLE = False
     detect_censors = None
 
@@ -364,7 +369,7 @@ def main():
             print("탐지 모드: auto (imgutils 주력 + ntd11 보완)")
         else:
             print("탐지 모드: auto 요청됐지만 imgutils가 없어 ntd11 단독으로 동작 "
-                  "(pip install dghs-imgutils)")
+                  "(uv sync로 의존성 설치 확인)")
     else:
         print("탐지 모드: ntd11 단독")
     force_ntd11 = (args.detector == "ntd11")
