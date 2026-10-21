@@ -119,6 +119,24 @@ def _iou(a, b) -> float:
 
 
 
+def _pick_device():
+    """추론 장치 선택.
+
+    GPU가 있어도 설치된 torch가 그 GPU 아키텍처(sm_XX)를 지원하지 않으면
+    (예: 최신 torch + GTX 10 시리즈 Pascal — 최근 torch 빌드에서 지원 제외)
+    CUDA 커널이 없어 실행 즉시 죽는다. 지원 목록에 있을 때만 GPU를 쓴다.
+    """
+    try:
+        import torch
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability(0)
+            if f"sm_{major}{minor}" in torch.cuda.get_arch_list():
+                return 0
+    except Exception:
+        pass
+    return "cpu"
+
+
 class Ntd11Detector:
     def __init__(self, pt_path: str, threads: int = 4):
         try:
@@ -126,6 +144,7 @@ class Ntd11Detector:
             torch.set_num_threads(max(1, threads))
         except Exception:
             pass
+        self.device = _pick_device()
         self.model = YOLO(pt_path)
         self.names = self.model.names  # {idx: label}
 
@@ -133,7 +152,8 @@ class Ntd11Detector:
         """단일 이미지 추론. 좌표는 입력 이미지 기준 픽셀."""
         h, w = rgb.shape[:2]
         results = self.model.predict(rgb, conf=confidence, iou=NMS_IOU,
-                                     imgsz=INPUT_SIZE, verbose=False)
+                                     imgsz=INPUT_SIZE, verbose=False,
+                                     device=self.device)
         dets = []
         boxes = results[0].boxes
         if boxes is None:
@@ -375,6 +395,7 @@ def main():
 
     print(f"모델 로딩 중… ({model})")
     det = Ntd11Detector(model, threads=args.threads)
+    print(f"추론 장치: {'GPU' if det.device != 'cpu' else 'CPU'}")
     if args.detector == "auto":
         if IMGUTILS_AVAILABLE:
             print("탐지 모드: auto (imgutils 주력 + ntd11 보완)")
@@ -394,18 +415,22 @@ def main():
         except Exception as e:
             print(f"[{i}/{total}] {f.name}: 열기 실패 ({e})")
             continue
-        # 1. 알파 합성
-        flat = flatten_alpha(img, bg)
-        # 2. 탐지 (auto: imgutils 주력 + ntd11 보완)
-        dets = detect_auto(flat, det, args.confidence,
-                           smart_crop=not args.no_smart_crop,
-                           force_ntd11=force_ntd11)
-        # 3. 검열 (모자이크 또는 블랭크)
-        out_img = censor_image(flat, dets, args.block, args.padding,
-                               mode=args.censor)
-        # 4. 저장 (파일명 그대로, _censored 안 붙임)
-        out_path = output_path(out_dir, f)
-        out_img.save(out_path, "WEBP", quality=args.quality)
+        try:
+            # 1. 알파 합성
+            flat = flatten_alpha(img, bg)
+            # 2. 탐지 (auto: imgutils 주력 + ntd11 보완)
+            dets = detect_auto(flat, det, args.confidence,
+                               smart_crop=not args.no_smart_crop,
+                               force_ntd11=force_ntd11)
+            # 3. 검열 (모자이크 또는 블랭크)
+            out_img = censor_image(flat, dets, args.block, args.padding,
+                                   mode=args.censor)
+            # 4. 저장 (파일명 그대로, _censored 안 붙임)
+            out_path = output_path(out_dir, f)
+            out_img.save(out_path, "WEBP", quality=args.quality)
+        except Exception as e:
+            print(f"[{i}/{total}] {f.name}: 처리 실패 ({e})")
+            continue
         dt = time.time() - t1
         tag = f"{len(dets)}개 영역" if dets else "탐지 없음"
         print(f"[{i}/{total}] {f.name} → {out_path.name} ({tag}, {dt:.1f}s)")

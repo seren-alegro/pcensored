@@ -248,6 +248,8 @@ class App(tk.Tk):
             self.log_q.put(("log", f"모델 로드 실패: {e}"))
             self.log_q.put(("done", None))
             return
+        self.log_q.put(("log", "추론 장치: "
+                               + ("GPU" if det.device != "cpu" else "CPU")))
         if core.IMGUTILS_AVAILABLE:
             self.log_q.put(("log", "탐지 모드: auto (imgutils 주력 + ntd11 보완)"))
         else:
@@ -269,13 +271,20 @@ class App(tk.Tk):
                 self.log_q.put(("log", f"[{i}/{total}] {f.name}: 열기 실패 ({e})"))
                 self.log_q.put(("progress", i))
                 continue
-            flat = core.flatten_alpha(img, opts["bg"])
-            dets = core.detect_auto(flat, det, opts["confidence"],
-                                    smart_crop=opts["smart_crop"])
-            out_img = core.censor_image(flat, dets, opts["block"], opts["padding"],
-                                        mode=opts["censor"])
-            out_path = core.output_path(out_dir, f)
-            out_img.save(out_path, "WEBP", quality=opts["quality"])
+            try:
+                flat = core.flatten_alpha(img, opts["bg"])
+                dets = core.detect_auto(flat, det, opts["confidence"],
+                                        smart_crop=opts["smart_crop"])
+                out_img = core.censor_image(flat, dets, opts["block"],
+                                            opts["padding"],
+                                            mode=opts["censor"])
+                out_path = core.output_path(out_dir, f)
+                out_img.save(out_path, "WEBP", quality=opts["quality"])
+            except Exception as e:
+                # 한 장이 실패해도 스레드가 죽어 전체가 멈추지 않게
+                self.log_q.put(("log", f"[{i}/{total}] {f.name}: 처리 실패 ({e})"))
+                self.log_q.put(("progress", i))
+                continue
             dt = time.time() - t1
             tag = f"{len(dets)}개 영역" if dets else "탐지 없음"
             self.log_q.put(("log", f"[{i}/{total}] {f.name} → {out_path.name} ({tag}, {dt:.1f}s)"))
