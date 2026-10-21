@@ -8,7 +8,7 @@ pcensored-amk: alpha-mask-killer + PCensored 합친 파이썬 도구.
      - imgutils detect_censors가 주력 (pussy/penis)
      - ntd11이 보완 (anus/testicles) — 전체 스캔 + 스마트 크롭 4회
      - imgutils가 없으면 ntd11 단독으로 폴백
-  3. 모자이크: 탐지 영역에 모자이크
+  3. 검열: 탐지 영역에 모자이크 또는 블랭크(검정 채움)
   4. WEBP 저장
 
 필요: pip install ultralytics numpy Pillow
@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 try:
     from ultralytics import YOLO
@@ -259,10 +259,15 @@ def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
-def censor_image(img: Image.Image, dets, block_size=20, padding=15):
-    """탐지 영역에 모자이크. img는 RGB PIL 이미지 (in place 아님, 복사 반환)."""
+def censor_image(img: Image.Image, dets, block_size=20, padding=15,
+                 mode="mosaic"):
+    """탐지 영역을 검열. img는 RGB PIL 이미지 (in place 아님, 복사 반환).
+
+    mode: "mosaic" 모자이크 / "blank" 검정으로 채움(blank censor)
+    """
     img = img.copy()
     w, h = img.size
+    draw = ImageDraw.Draw(img) if mode == "blank" else None
     for d in dets:
         x1 = _clamp(d["x1"] - padding, 0, w)
         y1 = _clamp(d["y1"] - padding, 0, h)
@@ -278,6 +283,9 @@ def censor_image(img: Image.Image, dets, block_size=20, padding=15):
             y2 = _clamp(c + MIN_MOSAIC // 2, 0, h)
         rw, rh = x2 - x1, y2 - y1
         if rw <= 1 or rh <= 1:
+            continue
+        if mode == "blank":
+            draw.rectangle([x1, y1, x2 - 1, y2 - 1], fill=(0, 0, 0))
             continue
         region = img.crop((x1, y1, x2, y2))
         small = region.resize((max(rw // block_size, 1), max(rh // block_size, 1)),
@@ -342,6 +350,9 @@ def main():
     ap.add_argument("--detector", choices=["auto", "ntd11"], default="auto",
                     help="auto: imgutils 주력+ntd11 보완 (기본), "
                          "ntd11: ntd11 단독")
+    ap.add_argument("--censor", choices=["mosaic", "blank"], default="mosaic",
+                    help="검열 방식: mosaic 모자이크 (기본), "
+                         "blank 검정으로 채움")
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -389,8 +400,9 @@ def main():
         dets = detect_auto(flat, det, args.confidence,
                            smart_crop=not args.no_smart_crop,
                            force_ntd11=force_ntd11)
-        # 3. 모자이크
-        out_img = censor_image(flat, dets, args.block, args.padding)
+        # 3. 검열 (모자이크 또는 블랭크)
+        out_img = censor_image(flat, dets, args.block, args.padding,
+                               mode=args.censor)
         # 4. 저장 (파일명 그대로, _censored 안 붙임)
         out_path = output_path(out_dir, f)
         out_img.save(out_path, "WEBP", quality=args.quality)

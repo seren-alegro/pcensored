@@ -136,6 +136,15 @@ class App(tk.Tk):
         self.thread_var = tk.StringVar(value="4")
         ttk.Entry(row3, textvariable=self.thread_var, width=6).pack(side="left", padx=5)
 
+        row3c = ttk.Frame(frm)
+        row3c.pack(fill="x", pady=4)
+        ttk.Label(row3c, text="검열 방식:").pack(side="left")
+        self.censor_var = tk.StringVar(value="mosaic")
+        ttk.Radiobutton(row3c, text="모자이크", variable=self.censor_var,
+                        value="mosaic").pack(side="left", padx=5)
+        ttk.Radiobutton(row3c, text="블랭크(검정)", variable=self.censor_var,
+                        value="blank").pack(side="left", padx=5)
+
         # 실행 버튼
         row4 = ttk.Frame(frm)
         row4.pack(fill="x", pady=8)
@@ -207,6 +216,7 @@ class App(tk.Tk):
             "bg": core.parse_bg(self.bg_var.get().strip() or "ffffff"),
             "smart_crop": self.crop_var.get(),
             "threads": threads,
+            "censor": self.censor_var.get(),
             "out_dir": Path(self.out_var.get()),
         }
         self.stop_event.clear()
@@ -243,6 +253,9 @@ class App(tk.Tk):
         else:
             self.log_q.put(("log", "탐지 모드: ntd11 단독 "
                                    "(imgutils/onnxruntime 없음 — uv sync 확인)"))
+        self.log_q.put(("log", "검열 방식: "
+                               + ("모자이크" if opts["censor"] == "mosaic"
+                                  else "블랭크(검정)")))
         total = len(files)
         t0 = time.time()
         for i, f in enumerate(files, 1):
@@ -259,7 +272,8 @@ class App(tk.Tk):
             flat = core.flatten_alpha(img, opts["bg"])
             dets = core.detect_auto(flat, det, opts["confidence"],
                                     smart_crop=opts["smart_crop"])
-            out_img = core.censor_image(flat, dets, opts["block"], opts["padding"])
+            out_img = core.censor_image(flat, dets, opts["block"], opts["padding"],
+                                        mode=opts["censor"])
             out_path = core.output_path(out_dir, f)
             out_img.save(out_path, "WEBP", quality=opts["quality"])
             dt = time.time() - t1
